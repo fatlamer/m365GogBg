@@ -1,0 +1,303 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2021-09-09/uiFormDefinition.schema.json",
+    "view": {
+        "kind": "Form",
+        "properties": {
+            "title": "Azure Key Vault",
+            "steps": [
+                {
+                    "name": "basics",
+                    "label": "Basics",
+                    "elements": [
+                        {
+                            "name": "preDeploymentTasks",
+                            "type": "Microsoft.Common.Section",
+                            "label": "Pre-Deployment tasks, that need to be done prior to this deployment",
+                            "elements": [
+                                {
+                                    "name": "privateDnsInfo",
+                                    "type": "Microsoft.Common.TextBlock",
+                                    "visible": true,
+                                    "options": {
+                                        "text": "Azure Key Vault Private DNS Zone must exist prior to running the Key Vault deployment solution. The deployment will fail if the Private DNS zone is not already present."
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "resourceScope",
+                            "type": "Microsoft.Common.ResourceScope",
+                            "subscription": {},
+                            "location": {
+                                "label": "Location",
+                                "allowedValues": [
+                                    "northeurope"
+                                ]
+                            }
+                        },
+                        {
+                            "name": "changeId",
+                            "type": "Microsoft.Common.TextBox",
+                            "label": "Change ID",
+                            "toolTip": "The ID of the Change this deployment is approved by. ID must follow the format: XX.XXXX (e.g. 23.1002)",
+                            "constraints": {
+                                "required": true,
+                                "regex": "^\\d{2}.\\d{4}$",
+                                "validationMessage": "ID must follow the format: XX.XXXX (e.g. 23.1002)"
+                            },
+                            "visible": true
+                        },
+                        {
+                            "name": "resourceGroupName",
+                            "type": "Microsoft.Common.TextBox",
+                            "label": "Resource Group Name",
+                            "defaultValue": "",
+                            "toolTip": "The name of the resource group where the Key Vault will be deployed. If the resource group does not exist, it will be created.",
+                            "constraints": {
+                                "required": true,
+                                "regex": "^[-\\w\\._\\(\\)]+$",
+                                "validationMessage": "Only Underscores, hyphens, periods, and letters or digits"
+                            },
+                            "visible": true
+                        },
+                        {
+                            "name": "name",
+                            "type": "Microsoft.Common.TextBox",
+                            "label": "Key Vault name",
+                            "defaultValue": "",
+                            "toolTip": "The name of the Key Vault to be deployed. The key vault name should be globally unique and match the standard for PaaS naming (eg. kv-App001), and it can't have more than 24 characters in length. The name can't start or end with hyphens '-'.",
+                            "constraints": {
+                                "required": true,
+                                "validations": [
+                                    {
+                                        "regex": "^kv-[a-zA-Z0-9-]{0,14}$",
+                                        "validationMessage": "The key vault name should be globally unique and match the standard for PaaS naming (eg. kv-App001), and it can't have more than 24 characters in length. The name can't start or end with hyphens '-'."
+                                    },
+                                    {
+                                        "isValid": "[equals(steps('basics').kvNameValidation.nameAvailable, true)]",
+                                        "message": "This name already exists or there's a resource in 'deleted' state with the same. Please choose another one."
+                                    }
+                                ]
+                            },
+                            "visible": true
+                        },
+                        {
+                            "name": "kvNameValidation",
+                            "type": "Microsoft.Solutions.ArmApiControl",
+                            "request": {
+                                "method": "POST",
+                                "path": "[concat(steps('basics').resourceScope.subscription.id,'/providers/Microsoft.KeyVault/checkNameAvailability?api-version=2022-07-01')]",
+                                "body": {
+                                    "name": "[steps('basics').name]",
+                                    "type": "Microsoft.KeyVault/vaults"
+                                }
+                            }
+                        },
+                        {
+                            "name": "privateAccess",
+                            "type": "Microsoft.Common.Section",
+                            "label": "Private Access",
+                            "elements": [
+                                {
+                                    "name": "vnetSelector",
+                                    "type": "Microsoft.Solutions.ResourceSelector",
+                                    "label": "Virtual Network",
+                                    "toolTip": "Select Virtual Network for the Key Vault private connectivity",
+                                    "resourceType": "Microsoft.Network/virtualNetworks",
+                                    "constraints": {
+                                        "required": true
+                                    },
+                                    "scope": {
+                                        "subscriptionId": "[steps('basics').resourceScope.subscription.subscriptionId]",
+                                        "location": "[steps('basics').resourceScope.location.name]"
+                                    },
+                                    "visible": true
+                                },
+                                {
+                                    "name": "resGroupQuery",
+                                    "type": "Microsoft.Solutions.ArmApiControl",
+                                    "request": {
+                                        "method": "GET",
+                                        "path": "[concat('/subscriptions/',steps('basics').resourceScope.subscription.subscriptionId,'/resourcegroups?api-version=2021-04-01')]"
+                                    }
+                                },
+                                {
+                                    "name": "subnets",
+                                    "type": "Microsoft.Solutions.ArmApiControl",
+                                    "request": {
+                                        "method": "GET",
+                                        "path": "[concat(steps('basics').resourceScope.subscription.id, '/resourceGroups/', last(take(split(steps('basics').privateAccess.vnetSelector.id, '/'), 5)), '/providers/Microsoft.Network/virtualNetworks/', steps('basics').privateAccess.vnetSelector.name,'/subnets?api-version=2022-01-01')]"
+                                    }
+                                },
+                                {
+                                    "name": "subnetList",
+                                    "type": "Microsoft.Common.DropDown",
+                                    "label": "Subnet",
+                                    "toolTip": "Select subnet for the Key Vault private connectivity",
+                                    "filter": true,
+                                    "constraints": {
+                                        "allowedValues": "[map(steps('basics').privateAccess.subnets.value, (item) => parse(concat('{\"label\":\"', item.name, '\",\"value\":\"', item.id, '\"}')))]",
+                                        "required": true
+                                    },
+                                    "visible": true
+                                }
+                            ]
+                        },
+                        {
+                            "name": "cost",
+                            "type": "Microsoft.Common.Section",
+                            "label": "Cost",
+                            "elements": [
+                                {
+                                    "name": "skuList",
+                                    "type": "Microsoft.Common.DropDown",
+                                    "label": "SKU",
+                                    "defaultValue": "standard",
+                                    "toolTip": "Select the required SKU for the Key Vault",
+                                    "filter": true,
+                                    "constraints": {
+                                        "allowedValues": [
+                                            {
+                                                "label": "Standard",
+                                                "description": "Select Standard tier",
+                                                "value": "standard"
+                                            },
+                                            {
+                                                "label": "Premium",
+                                                "description": "Select Premium tier",
+                                                "value": "premium"
+                                            }
+                                        ],
+                                        "required": true
+                                    },
+                                    "visible": true
+                                }
+                            ]
+                        },
+                        {
+                            "name": "options",
+                            "type": "Microsoft.Common.Section",
+                            "label": "Additional options",
+                            "elements": [
+                                {
+                                    "name": "forDeployment",
+                                    "type": "Microsoft.Common.DropDown",
+                                    "label": "Virtual Machines for deployment",
+                                    "placeholder": "",
+                                    "defaultValue": "Enabled",
+                                    "toolTip": "Specifies whether Azure Virtual Machines are permitted to retrieve certificates stored as secrets from the key vault.",
+                                    "constraints": {
+                                        "allowedValues": [
+                                            {
+                                                "label": "Disabled",
+                                                "value": false
+                                            },
+                                            {
+                                                "label": "Enabled",
+                                                "value": true
+                                            }
+                                        ],
+                                        "required": false
+                                    },
+                                    "visible": ""
+                                },
+                                {
+                                    "name": "forDiskEncryption",
+                                    "type": "Microsoft.Common.DropDown",
+                                    "label": "Disk Encryption",
+                                    "placeholder": "",
+                                    "defaultValue": "Disabled",
+                                    "toolTip": "Specifies whether Azure Disk Encryption is permitted to retrieve secrets from the vault and unwrap keys.",
+                                    "constraints": {
+                                        "allowedValues": [
+                                            {
+                                                "label": "Disabled",
+                                                "value": false
+                                            },
+                                            {
+                                                "label": "Enabled",
+                                                "value": true
+                                            }
+                                        ],
+                                        "required": false
+                                    },
+                                    "visible": ""
+                                },
+                                {
+                                    "name": "forTemplateDeployment",
+                                    "type": "Microsoft.Common.DropDown",
+                                    "label": "Template Deployment",
+                                    "placeholder": "",
+                                    "defaultValue": "Disabled",
+                                    "toolTip": "Specifies whether Azure Resource Manager is permitted to retrieve secrets from the key vault.",
+                                    "constraints": {
+                                        "allowedValues": [
+                                            {
+                                                "label": "Disabled",
+                                                "value": false
+                                            },
+                                            {
+                                                "label": "Enabled",
+                                                "value": true
+                                            }
+                                        ],
+                                        "required": false
+                                    },
+                                    "visible": ""
+                                },
+                                {
+                                    "name": "allowAzureServices",
+                                    "type": "Microsoft.Common.DropDown",
+                                    "label": "Allow trusted Azure services",
+                                    "placeholder": "",
+                                    "defaultValue": "[if(equals(bool(steps('basics').options.forDeployment), true), 'Enabled', 'Disabled')]",
+                                    "toolTip": "Allow trusted Microsoft services to bypass this resource firewall.",
+                                    "constraints": {
+                                        "allowedValues": "[map(parse(if(equals(bool(steps('basics').options.forDeployment), true), '[{\"name\":\"Enabled\",\"value\":true}]', '[{\"name\":\"Disabled\",\"value\":false},{\"name\":\"Enabled\",\"value\":true}]')), (item) => parse(concat('{\"label\":\"', item.name, '\",\"value\":\"', string(item.value), '\"}')))]",
+                                        "required": false
+                                    },
+                                    "visible": ""
+                                }
+                            ]
+                        },
+                        {
+                            "name": "postDeploymentTasks",
+                            "type": "Microsoft.Common.Section",
+                            "label": "Post deployment tasks",
+                            "elements": [
+                                {
+                                    "name": "KeyVaultPrincipalInfo",
+                                    "type": "Microsoft.Common.TextBlock",
+                                    "visible": true,
+                                    "options": {
+                                        "text": "Azure KeyVault Access Policies can be used to further configure access to the Key Vault data plane",
+                                        "link": {
+                                            "label": "Learn more",
+                                            "uri": "https://learn.microsoft.com/en-us/azure/key-vault/general/assign-access-policy?tabs=azure-portal"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        "outputs": {
+            "parameters": {
+                "name": "[steps('basics').name]",
+                "changeId": "[steps('basics').changeId]",
+                "resourceGroupName": "[steps('basics').resourceGroupName]",
+                "subnetResourceId": "[steps('basics').privateAccess.subnetList]",
+                "sku": "[steps('basics').cost.skuList]",
+                "enabledForDeployment": "[steps('basics').options.forDeployment]",
+                "enabledForDiskEncryption": "[steps('basics').options.forDiskEncryption]",
+                "enabledForTemplateDeployment": "[steps('basics').options.forTemplateDeployment]",
+                "allowAzureServices": "[steps('basics').options.allowAzureServices]"
+            },
+            "kind": "Subscription",
+            "location": "[steps('basics').resourceScope.location.name]",
+            "subscriptionId": "[steps('basics').resourceScope.subscription.id]"
+        }
+    }
+}

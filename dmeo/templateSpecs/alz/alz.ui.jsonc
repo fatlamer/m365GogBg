@@ -1,0 +1,94 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2021-09-09/uiFormDefinition.schema.json",
+    "view": {
+        "kind": "Form",
+        "properties": {
+            "title": "Azure Landing Zone",
+            "steps": [
+                {
+                    "name": "basics",
+                    "label": "Basics",
+                    "elements": [
+                        {
+                            "name": "resourceScope",
+                            "type": "Microsoft.Common.ResourceScope",
+                            "subscription": {},
+                            "location": {
+                                "label": "Location",
+                                "allowedValues": [
+                                    "northeurope"
+                                ]
+                            }
+                        },
+                        {
+                            "name": "changeId",
+                            "type": "Microsoft.Common.TextBox",
+                            "label": "Change ID",
+                            "defaultValue": "",
+                            "toolTip": "The ID of the Change this deployment is approved by.",
+                            "constraints": {
+                                "required": true,
+                                "regex": "\\d\\d\\.\\d\\d\\d\\d",
+                                "validationMessage": "The change ID must be in the following format: XX.XXXX (e.g. 23.10027)"
+                            },
+                            "visible": true
+                        },
+                        {
+                            "name": "name",
+                            "type": "Microsoft.Common.TextBox",
+                            "label": "Name",
+                            "defaultValue": "",
+                            "toolTip": "The name of the Azure Landing Zone",
+                            "constraints": {
+                                "required": true,
+                                "regex": "^[-\\w\\._\\(\\)]+$",
+                                "validationMessage": "Only Underscores, hyphens, periods, and letters or digits"
+                            },
+                            "visible": true
+                        },
+                        {
+                            "name": "ipAddressRange",
+                            "type": "Microsoft.Common.TextBox",
+                            "label": "The AddressRange of the default Virtual Network",
+                            "defaultValue": "",
+                            "toolTip": "Defines the spoke vnet ip address range, make sure it does not already exist and there is no active peering with hub vnet",
+                            "constraints": {
+                                "regex": "^10\\.100\\.([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-5][0-5])\\.0\/24$",
+                                "validationMessage": "Please use a valid 10.100.x.0/24 IP Range",
+                                "required": true,
+                                "validations": [
+                                    {}
+                                ]
+                            },
+                            "visible": true
+                        },
+                        {
+                            "name": "expiryTime",
+                            "type": "Microsoft.Common.TextBox",
+                            "label": "Number of days before deletion",
+                            "defaultValue": "",
+                            "toolTip": "Sets the lifespan of the landing zone and it's resources in days, allowed values: 1-90",
+                            "constraints": {
+                                "required": true,
+                                "regex": "^(?:[1-8][0-9]|9[0-0]|[1-9])$",
+                                "validationMessage": "Only digits in the range of 1-90 "
+                            },
+                            "visible": true
+                        }
+                    ]
+                }
+            ]
+        },
+        "outputs": {
+            "parameters": {
+                "changeId": "[steps('basics').changeId]",
+                "name": "[steps('basics').name]",
+                "expiryTime": "[steps('basics').expiryTime]",
+                "ipAddressRange": "[steps('basics').ipAddressRange]"
+            },
+            "kind": "Subscription",
+            "location": "[steps('basics').resourceScope.location.name]",
+            "subscriptionId": "[steps('basics').resourceScope.subscription.id]"
+        }
+    }
+}

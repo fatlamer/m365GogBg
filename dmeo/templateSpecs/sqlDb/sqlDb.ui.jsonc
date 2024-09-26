@@ -1,0 +1,277 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2021-09-09/uiFormDefinition.schema.json",
+  "view": {
+    "kind": "Form",
+    "properties": {
+      "title": "Create SQL Database",
+      "steps": [
+        {
+          "name": "basics",
+          "label": "Basics",
+          "elements": [
+            {
+              "name": "resourceScope",
+              "type": "Microsoft.Common.ResourceScope",
+              "subscription": {},
+              "location": {
+                "label": "Location",
+                "allowedValues": [
+                  "northeurope"
+                ]
+              }
+            },
+            {
+              "name": "changeId",
+              "type": "Microsoft.Common.TextBox",
+              "label": "Change ID",
+              "toolTip": "The ID of the Change this deployment is approved by. ID must follow the format: XX.XXXX (e.g. 23.1002)",
+              "constraints": {
+                "required": true,
+                "regex": "^\\d{2}.\\d{4}$",
+                "validationMessage": "ID must follow the format: XX.XXXX (e.g. 23.1002)"
+              },
+              "visible": true
+            },
+            {
+              "name": "database",
+              "type": "Microsoft.Common.Section",
+              "label": "Database Details",
+              "elements": [
+                {
+                  "name": "sqlServer",
+                  "type": "Microsoft.Solutions.ResourceSelector",
+                  "label": "SQL Server",
+                  "toolTip": "Specify the name of the SQL server for the SQL DB.",
+                  "resourceType": "Microsoft.Sql/servers",
+                  "scope": {
+                    "subscriptionId": "[steps('basics').resourceScope.subscription.subscriptionId]",
+                    "location": "[steps('basics').resourceScope.location.name]"
+                  },
+                  "constraints": {
+                    "required": true
+                  },
+                  "visible": true
+                },
+                {
+                  "name": "name",
+                  "type": "Microsoft.Common.TextBox",
+                  "label": "SQL DB Name",
+                  "defaultValue": "",
+                  "toolTip": "The name of the SQL DB to be deployed. Your database name can't end with '.' or ' ', can't contain '<,>,*,%,&,:,\\,/,?' or control characters",
+                  "constraints": {
+                    "required": true,
+                    "regex": "",
+                    "validationMessage": ""
+                  },
+                  "visible": true
+                }
+              ]
+            },
+            {
+              "name": "serviceTier",
+              "type": "Microsoft.Common.Section",
+              "label": "Compute + storage",
+              "elements": [
+                {
+                  "name": "skusApi",
+                  "type": "Microsoft.Solutions.ArmApiControl",
+                  "request": {
+                    "method": "GET",
+                    "path": "[concat(steps('basics').resourceScope.subscription.id,'/providers/Microsoft.Sql/locations/',steps('basics').resourceScope.location.name,'/capabilities?include=supportedEditions&api-version=2021-11-01')]",
+                    "transforms": {
+                      "editionsDropDown": "supportedServerVersions[0].supportedEditions[? contains(['Basic','Standard','Premium','GeneralPurpose','BusinessCritical'],name)].{label:name, value:@}"
+                    }
+                  }
+                },
+                {
+                  "name": "edition",
+                  "type": "Microsoft.Common.DropDown",
+                  "label": "Edition",
+                  "toolTip": "Select the Edition for the SQL DB SKU.",
+                  "filter": true,
+                  "constraints": {
+                    "allowedValues": "[steps('basics').serviceTier.skusApi.transformed.editionsDropDown]",
+                    "required": true
+                  },
+                  "visible": true
+                },
+                {
+                  "name": "sku",
+                  "type": "Microsoft.Common.DropDown",
+                  "label": "SKU",
+                  "toolTip": "Select the SKU for the SQL DB. For the DTU purchasing model the SKU Basic or letter + Number code, e.g. S4. For the vCore purchasing model the SKU name includes the tier code (GP for GeneralPurpose, GP_S for Serverless, BC for BusinessCritical), the hardware family code (Gen5, FSv2, DC, M), and the number of vCores, e.g. GP_Gen5_2.",
+                  "filter": true,
+                  "constraints": {
+                    "allowedValues": "[map(steps('basics').serviceTier.edition.supportedServiceLevelObjectives, (item) => parse(concat('{\"label\":\"', item.name, '\",\"value\":', string(item), '}')))]",
+                    "required": true
+                  },
+                  "visible": true
+                },
+                {
+                  "name": "sqlDbMinCapacity",
+                  "type": "Microsoft.Common.DropDown",
+                  "label": "Min vCores",
+                  "toolTip": "Specify the Min vCores for the SQL DB.",
+                  "filter": true,
+                  "constraints": {
+                    "allowedValues": "[map(steps('basics').serviceTier.sku.supportedMinCapacities, (item) => parse(concat('{\"label\":\"', string(item.value), ' vCores\",\"value\":\"', string(item.value), '\"}')))]",
+                    "required": true
+                  },
+                  "visible": "[equals(steps('basics').serviceTier.sku.computeModel,'Serverless')]"
+                },
+                {
+                  "name": "sqlDbReadScale",
+                  "type": "Microsoft.Common.DropDown",
+                  "label": "Read Scale-Out",
+                  "toolTip": "Enable or Disable the read scale-out functionality",
+                  "constraints": {
+                    "allowedValues": [
+                      {
+                        "label": "Enabled",
+                        "value": "Enabled"
+                      },
+                      {
+                        "label": "Disabled",
+                        "value": "Disabled"
+                      }
+                    ],
+                    "required": true
+                  },
+                  "visible": "[greaterOrEquals(steps('basics').serviceTier.edition.readScale.maxNumberOfReplicas,1)]"
+                },
+                {
+                  "name": "isZoneRedundant",
+                  "type": "Microsoft.Common.OptionsGroup",
+                  "label": "Zone Redundancy",
+                  "defaultValue": "Disabled",
+                  "toolTip": "Specify if the SQL DB will be zone-redundant.",
+                  "constraints": {
+                    "allowedValues": [
+                      {
+                        "label": "Enabled",
+                        "value": true
+                      },
+                      {
+                        "label": "Disabled",
+                        "value": false
+                      }
+                    ],
+                    "required": true
+                  },
+                  "visible": "[steps('basics').serviceTier.sku.zoneRedundant]"
+                },
+                {
+                  "name": "sqlDbMaxSizeGb",
+                  "type": "Microsoft.Common.TextBox",
+                  "label": "Data Max Size (GB)",
+                  "defaultValue": "",
+                  "toolTip": "The maximum Data Max Size differs for different SKUs.<br>For the <strong>DTU</strong> purchasing model, see the <strong>\"Max storage (GB)\"</strong> for the selected SKU [here](https://learn.microsoft.com/en-us/azure/azure-sql/database/resource-limits-dtu-single-databases?view=azuresql#single-database-storage-sizes-and-compute-sizes).<br>For the <strong>vCore</strong> purchasing model see <strong>\"Max data size (GB)\"</strong> for the selected SKU [here](https://learn.microsoft.com/en-us/azure/azure-sql/database/resource-limits-vcore-single-databases?view=azuresql).",
+                  "constraints": {
+                    "required": true,
+                    "regex": "",
+                    "validationMessage": ""
+                  },
+                  "visible": true
+                },
+                {
+                  "name": "maxSizeInfoDtu",
+                  "type": "Microsoft.Common.InfoBox",
+                  "visible": "[contains(split('Basic,Standard,Premium',','),steps('basics').serviceTier.edition.name)]",
+                  "options": {
+                    "style": "Warning",
+                    "text": "<h3><strong>Available values for Data Max Size for the DTU purchasing model</strong><h3>The following sizes (up to the maximum for the selected SKU) are available:<ul> <li><strong>Basic:</strong>          0.1 0.5 1 2 </li><li><strong>Standard:</strong>   5 10 20 30 40 50 100 150 200 250 300 400 500 750 1024 </li><li><strong>Premium:</strong>  1280 1536 1792 2048 2304 2560 2816 3072 3328 3584 3840 4096 </li> </ul> Note: Each tier also supports all values from lower tiers."
+                  }
+                }
+              ]
+            },
+            {
+              "name": "backup",
+              "type": "Microsoft.Common.Section",
+              "label": "Backup",
+              "elements": [
+                {
+                  "name": "ltrRetentionMonths",
+                  "type": "Microsoft.Common.Slider",
+                  "min": 0,
+                  "max": 64,
+                  "label": "Monthly LTR Backups retention",
+                  "subLabel": "Months",
+                  "defaultValue": 0,
+                  "showStepMarkers": false,
+                  "toolTip": "Keep the first backup of each month for:",
+                  "constraints": {
+                    "required": false
+                  },
+                  "visible": true
+                },
+                {
+                  "name": "sqlDbBackupStorageRedundancy",
+                  "type": "Microsoft.Common.DropDown",
+                  "label": "Backup Storage Redundancy",
+                  "defaultValue": "",
+                  "toolTip": "Specify the backup storage redundancy for the SQL DB",
+                  "constraints": {
+                    "allowedValues": [
+                      {
+                        "label": "Local",
+                        "value": "Local"
+                      },
+                      {
+                        "label": "Zone",
+                        "value": "Zone"
+                      },
+                      {
+                        "label": "Geo",
+                        "value": "Geo"
+                      }
+                    ],
+                    "required": true
+                  },
+                  "visible": true
+                }
+              ]
+            },
+            {
+              "name": "additionalSettings",
+              "type": "Microsoft.Common.Section",
+              "label": "Additional Settings",
+              "elements": [
+                {
+                  "name": "sqlDbCollation",
+                  "type": "Microsoft.Common.TextBox",
+                  "label": "Collation",
+                  "defaultValue": "Latin1_General_100_CI_AS_KS_WS",
+                  "toolTip": "Collations in SQL Server provide sorting rules, case, and accent sensitivity properties for your data. Collations that are used with character data types, such as char and varchar, dictate the code page and corresponding characters that can be represented for that data type. For additional information go to: https://learn.microsoft.com/en-us/sql/relational-databases/collations/collation-and-unicode-support?view=sql-server-ver16",
+                  "constraints": {
+                    "required": true,
+                    "regex": "",
+                    "validationMessage": ""
+                  },
+                  "visible": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "outputs": {
+      "parameters": {
+        "name": "[steps('basics').database.name]",
+        "changeId": "[steps('basics').changeId]",
+        "sqlServerResourceId": "[steps('basics').database.sqlServer.id]",
+        "sqlDbSkuName": "[steps('basics').serviceTier.sku.name]",
+        "sqlDbBackupStorageRedundancy": "[steps('basics').backup.sqlDbBackupStorageRedundancy]",
+        "sqlDbLtrMonthlyRetentionInMonths": "[steps('basics').backup.ltrRetentionMonths]",
+        "sqlDbMinCapacity": "[steps('basics').serviceTier.sqlDbMinCapacity]",
+        "sqlDbReadScale": "[steps('basics').serviceTier.sqlDbReadScale]",
+        "sqlDbMaxSizeGb": "[steps('basics').serviceTier.sqlDbMaxSizeGb]",
+        "isZoneRedundant": "[bool(steps('basics').serviceTier.isZoneRedundant)]",
+        "sqlDbCollation": "[steps('basics').additionalSettings.sqlDbCollation]"
+      },
+      "kind": "Subscription",
+      "location": "[steps('basics').resourceScope.location.name]",
+      "subscriptionId": "[steps('basics').resourceScope.subscription.id]"
+    }
+  }
+}

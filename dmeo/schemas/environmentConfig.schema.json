@@ -1,0 +1,52 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "The environment configuration schema",
+    "description": "This schema defines the structure of the environment configuration files elements so they all follow the same structure",
+    "definitions": {
+        "environment": {
+            "type": "object",
+            "properties": {
+                "azure": {
+                    "type": "object",
+                    "properties": {
+                        "hubRgName": {
+                            "type": "string",
+                            "description": "The name of the hub virtual network resource group"
+                        },
+                        "hubVnetName": {
+                            "type": "string",
+                            "description": "The name of the hub virtual network"
+                        },
+                        "location": {
+                            "type": "string",
+                            "description": "The location for all of the resources"
+                        }
+                    },
+                    "required": [
+                        "hubRgName",
+                        "hubVnetName"
+                    ],
+                    "additionalItems": true
+                }
+            },
+            "required": [
+                "azure"
+            ],
+            "additionalItems": false
+        }
+    },
+    "required": [
+        "$schema"
+    ],
+    "properties": {
+        "$schema": {
+            "$id": "#/properties/$schema",
+            "type": "string",
+            "const": "../schemas/environmentConfig.schema.json"
+        }
+    },
+    "additionalProperties": {
+        "$ref": "#/definitions/environment"
+    }
+}

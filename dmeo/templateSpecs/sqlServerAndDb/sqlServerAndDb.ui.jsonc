@@ -1,0 +1,494 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2021-09-09/uiFormDefinition.schema.json",
+    "view": {
+        "kind": "Form",
+        "properties": {
+            "title": "Create SQL Database Server",
+            "steps": [
+                {
+                    "name": "basics",
+                    "label": "Server",
+                    "elements": [
+                        {
+                            "name": "preDeploymentTasks",
+                            "type": "Microsoft.Common.Section",
+                            "label": "Pre-Deployment tasks, that need to be done prior to this deployment",
+                            "elements": [
+                                {
+                                    "name": "kvInfo",
+                                    "type": "Microsoft.Common.TextBlock",
+                                    "visible": true,
+                                    "options": {
+                                        "text": "Previously created Key Vault with a key with encryption capabilities must exist. A Private Endpoint with pre-configured DNS record is required for the Key Vault."
+                                    }
+                                },
+                                {
+                                    "name": "peDnsZoneInfo",
+                                    "type": "Microsoft.Common.TextBlock",
+                                    "visible": true,
+                                    "options": {
+                                        "text": "Azure SQL Server Private DNS Zone must exist prior to running the SQL deployment solution. Azure SQL Server deployment will fail if the Private DNS zone is not already present."
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "resourceScope",
+                            "type": "Microsoft.Common.ResourceScope",
+                            "subscription": {},
+                            "location": {
+                                "label": "Location",
+                                "allowedValues": [
+                                    "northeurope"
+                                ]
+                            }
+                        },
+                        {
+                            "name": "changeId",
+                            "type": "Microsoft.Common.TextBox",
+                            "label": "Change ID",
+                            "toolTip": "The ID of the Change this deployment is approved by. ID must follow the format: XX.XXXX (e.g. 23.1002)",
+                            "constraints": {
+                                "required": true,
+                                "regex": "^\\d{2}.\\d{4}$",
+                                "validationMessage": "ID must follow the format: XX.XXXX (e.g. 23.1002)"
+                            },
+                            "visible": true
+                        },
+                        {
+                            "name": "resourceGroupName",
+                            "type": "Microsoft.Common.TextBox",
+                            "label": "Resource Group Name",
+                            "defaultValue": "",
+                            "toolTip": "The name of the resource group where the Sql Server will be deployed. If the resource group does not exist, it will be created.",
+                            "constraints": {
+                                "required": true,
+                                "regex": "^[-\\w\\._\\(\\)]+$",
+                                "validationMessage": "Only Underscores, hyphens, periods, and letters or digits"
+                            },
+                            "visible": true
+                        },
+                        {
+                            "name": "name",
+                            "type": "Microsoft.Common.TextBox",
+                            "label": "SQL Server Name",
+                            "defaultValue": "",
+                            "toolTip": "The name of the SQL Server to be deployed. Your server name can contain only lowercase letters, numbers and hyphens '-', and it can't have more than 63 characters in length. Your server name can't start or end with hyphens '-'.",
+                            "constraints": {
+                                "required": true,
+                                "validations": [
+                                    {
+                                        "regex": "^sql-[a-zA-Z0-9-]{1,61}$",
+                                        "validationMessage": "Your server name can contain only lowercase letters, numbers and hyphens '-', and it can't have more than 63 characters in length. Your server name can't start or end with hyphens '-'."
+                                    },
+                                    {
+                                        "isValid": "[equals(steps('basics').sqlServerNameValidation.available, true)]",
+                                        "message": "This name already exists or there's a resource in 'deleted' state with the same. Please choose another one."
+                                    }
+                                ]
+                            },
+                            "visible": true
+                        },
+                        {
+                            "name": "sqlServerNameValidation",
+                            "type": "Microsoft.Solutions.ArmApiControl",
+                            "request": {
+                                "method": "POST",
+                                "path": "[concat(steps('basics').resourceScope.subscription.id,'/providers/Microsoft.Sql/checkNameAvailability?api-version=2021-11-01')]",
+                                "body": {
+                                    "name": "[steps('basics').name]",
+                                    "type": "Microsoft.Sql/servers"
+                                }
+                            }
+                        },
+                        {
+                            "name": "auth",
+                            "type": "Microsoft.Common.Section",
+                            "label": "Authentication",
+                            "elements": [
+                                {
+                                    "type": "Microsoft.Solutions.BladeInvokeControl",
+                                    "name": "selectSqlAdminsBlade",
+                                    "transforms": {
+                                        "selection": "selectedObjects|[0].{displayName:displayName, id:id}"
+                                    },
+                                    "openBladeStatus": "[steps('basics').auth.sqlAadAdministratorGroup.changing]",
+                                    "bladeReference": {
+                                        "name": "ObjectPickerBlade",
+                                        "extension": "Microsoft_AAD_IAM",
+                                        "parameters": {
+                                            "title": "GraphObjectPicker",
+                                            "bladeTitle": "Select AAD Group for Sql Administrators",
+                                            "informationHeader": "Select AAD Group for Sql Administrators",
+                                            "searchBoxTooltip": "Select AAD Group for Sql Administrators",
+                                            "queries": 2,
+                                            "selectedGridLabel": "Sql Administrators Group",
+                                            "selectionMinimum": 1,
+                                            "selectionMaximum": 1,
+                                            "additionalQueriesOnSearch": 2
+                                        },
+                                        "inFullScreen": false
+                                    }
+                                },
+                                {
+                                    "type": "Microsoft.Common.Selector",
+                                    "name": "sqlAadAdministratorGroup",
+                                    "label": "Sql Administrators group",
+                                    "keyPath": "displayName",
+                                    "descriptionKeyPath": "id",
+                                    "value": "[steps('basics').auth.selectSqlAdminsBlade.transformed.selection]",
+                                    "visible": true,
+                                    "barColor": "[if(contains(steps('basics').auth.selectSqlAdminsBlade,'selectedObjects'),'#7fba00','#FF0000')]",
+                                    "constraints": {
+                                        "required": true
+                                    },
+                                    "link": "Select AAD Group"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "privateAccess",
+                            "type": "Microsoft.Common.Section",
+                            "label": "Private Access",
+                            "elements": [
+                                {
+                                    "name": "vnetSelector",
+                                    "type": "Microsoft.Solutions.ResourceSelector",
+                                    "label": "Virtual Network",
+                                    "toolTip": "Select Virtual Network for the SQL Server private connectivity",
+                                    "resourceType": "Microsoft.Network/virtualNetworks",
+                                    "constraints": {
+                                        "required": true
+                                    },
+                                    "scope": {
+                                        "subscriptionId": "[steps('basics').resourceScope.subscription.subscriptionId]",
+                                        "location": "[steps('basics').resourceScope.location.name]"
+                                    },
+                                    "visible": true
+                                },
+                                {
+                                    "name": "subnets",
+                                    "type": "Microsoft.Solutions.ArmApiControl",
+                                    "request": {
+                                        "method": "GET",
+                                        "path": "[concat(steps('basics').resourceScope.subscription.id, '/resourceGroups/', last(take(split(steps('basics').privateAccess.vnetSelector.id, '/'), 5)), '/providers/Microsoft.Network/virtualNetworks/', steps('basics').privateAccess.vnetSelector.name,'/subnets?api-version=2022-01-01')]"
+                                    }
+                                },
+                                {
+                                    "name": "subnetList",
+                                    "type": "Microsoft.Common.DropDown",
+                                    "label": "Subnet",
+                                    "toolTip": "Select subnet for the SQL Server private connectivity",
+                                    "filter": true,
+                                    "constraints": {
+                                        "allowedValues": "[map(steps('basics').privateAccess.subnets.value, (item) => parse(concat('{\"label\":\"', item.name, '\",\"value\":\"', item.id, '\"}')))]",
+                                        "required": true
+                                    },
+                                    "visible": true
+                                }
+                            ]
+                        },
+                        {
+                            "name": "encryption",
+                            "type": "Microsoft.Common.Section",
+                            "label": "Transparent Data Encryption",
+                            "elements": [
+                                {
+                                    "name": "selectKeyVaultKeyBlade",
+                                    "type": "Microsoft.Solutions.BladeInvokeControl",
+                                    "transforms": {
+                                        "bladeOutput": "@"
+                                    },
+                                    "openBladeStatus": "[steps('basics').encryption.keyVaultKey.changing]",
+                                    "bladeReference": {
+                                        "name": "KeyPickerV2ViewModel",
+                                        "extension": "Microsoft_Azure_KeyVault",
+                                        "parameters": {
+                                            "title": "KeyVaultKeyPicker",
+                                            "bladeTitle": "Select Key Vault and Key",
+                                            "subscriptionId": "[steps('basics').resourceScope.subscription.id]",
+                                            "showSubscriptionDropdown": true,
+                                            "showCreateNew": false
+                                        },
+                                        "inFullScreen": false
+                                    }
+                                },
+                                {
+                                    "name": "keyVaultKey",
+                                    "type": "Microsoft.Common.Selector",
+                                    "label": "Encryption Key",
+                                    "keyPath": "keyId",
+                                    "value": "[steps('basics').encryption.selectKeyVaultKeyBlade.transformed.bladeOutput]",
+                                    "visible": true,
+                                    "barColor": "[if(empty(steps('basics').encryption.selectKeyVaultKeyBlade), '#FF0000', '#7fba00')]",
+                                    "constraints": {
+                                        "required": true
+                                    },
+                                    "link": "Select an encryption key"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "postDeploymentTasks",
+                            "type": "Microsoft.Common.Section",
+                            "label": "Post deployment tasks",
+                            "elements": [
+                                {
+                                    "name": "sqlServerPrincipalInfo",
+                                    "type": "Microsoft.Common.TextBlock",
+                                    "visible": true,
+                                    "options": {
+                                        "style": "Warning",
+                                        "text": "Once the sql server is deployed, it is necessary to grant it's system-assigned managed identity read permissions to AAD.",
+                                        "link": {
+                                            "label": "Click on this link to learn more",
+                                            "uri": "https://learn.microsoft.com/en-us/azure/azure-sql/database/authentication-azure-ad-user-assigned-managed-identity?view=azuresql#permissions"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "name": "sqlDb",
+                    "label": "Database",
+                    "elements": [
+                        {
+                            "name": "database",
+                            "type": "Microsoft.Common.Section",
+                            "label": "Database Details",
+                            "elements": [
+                                {
+                                    "name": "name",
+                                    "type": "Microsoft.Common.TextBox",
+                                    "label": "SQL DB Name",
+                                    "defaultValue": "",
+                                    "toolTip": "The name of the SQL DB to be deployed. Your database name can't end with '.' or ' ', can't contain '<,>,*,%,&,:,\\,/,?' or control characters",
+                                    "constraints": {
+                                        "required": true,
+                                        "regex": "",
+                                        "validationMessage": ""
+                                    },
+                                    "visible": true
+                                }
+                            ]
+                        },
+                        {
+                            "name": "serviceTier",
+                            "type": "Microsoft.Common.Section",
+                            "label": "Compute + storage",
+                            "elements": [
+                                {
+                                    "name": "skusApi",
+                                    "type": "Microsoft.Solutions.ArmApiControl",
+                                    "request": {
+                                        "method": "GET",
+                                        "path": "[concat(steps('basics').resourceScope.subscription.id,'/providers/Microsoft.Sql/locations/',steps('basics').resourceScope.location.name,'/capabilities?include=supportedEditions&api-version=2021-11-01')]",
+                                        "transforms": {
+                                            "editionsDropDown": "supportedServerVersions[0].supportedEditions[? contains(['Basic','Standard','Premium','GeneralPurpose','BusinessCritical'],name)].{label:name, value:@}"
+                                        }
+                                    }
+                                },
+                                {
+                                    "name": "edition",
+                                    "type": "Microsoft.Common.DropDown",
+                                    "label": "Edition",
+                                    "toolTip": "Select the Edition for the SQL DB SKU.",
+                                    "filter": true,
+                                    "constraints": {
+                                        "allowedValues": "[steps('sqlDb').serviceTier.skusApi.transformed.editionsDropDown]",
+                                        "required": true
+                                    },
+                                    "visible": true
+                                },
+                                {
+                                    "name": "sku",
+                                    "type": "Microsoft.Common.DropDown",
+                                    "label": "SKU",
+                                    "toolTip": "Select the SKU for the SQL DB. For the DTU purchasing model the SKU Basic or letter + Number code, e.g. S4. For the vCore purchasing model the SKU name includes the tier code (GP for GeneralPurpose, GP_S for Serverless, BC for BusinessCritical), the hardware family code (Gen5, FSv2, DC, M), and the number of vCores, e.g. GP_Gen5_2.",
+                                    "filter": true,
+                                    "constraints": {
+                                        "allowedValues": "[map(steps('sqlDb').serviceTier.edition.supportedServiceLevelObjectives, (item) => parse(concat('{\"label\":\"', item.name, '\",\"value\":', string(item), '}')))]",
+                                        "required": true
+                                    },
+                                    "visible": true
+                                },
+                                {
+                                    "name": "sqlDbMinCapacity",
+                                    "type": "Microsoft.Common.DropDown",
+                                    "label": "Min vCores",
+                                    "toolTip": "Specify the Min vCores for the SQL DB.",
+                                    "filter": true,
+                                    "constraints": {
+                                        "allowedValues": "[map(steps('sqlDb').serviceTier.sku.supportedMinCapacities, (item) => parse(concat('{\"label\":\"', string(item.value), ' vCores\",\"value\":\"', string(item.value), '\"}')))]",
+                                        "required": true
+                                    },
+                                    "visible": "[equals(steps('sqlDb').serviceTier.sku.computeModel,'Serverless')]"
+                                },
+                                {
+                                    "name": "sqlDbReadScale",
+                                    "type": "Microsoft.Common.DropDown",
+                                    "label": "Read Scale-Out",
+                                    "toolTip": "Enable or Disable the read scale-out functionality",
+                                    "constraints": {
+                                        "allowedValues": [
+                                            {
+                                                "label": "Enabled",
+                                                "value": "Enabled"
+                                            },
+                                            {
+                                                "label": "Disabled",
+                                                "value": "Disabled"
+                                            }
+                                        ],
+                                        "required": true
+                                    },
+                                    "visible": "[greaterOrEquals(steps('sqlDb').serviceTier.edition.readScale.maxNumberOfReplicas,1)]"
+                                },
+                                {
+                                    "name": "isZoneRedundant",
+                                    "type": "Microsoft.Common.OptionsGroup",
+                                    "label": "Zone Redundancy",
+                                    "defaultValue": "Disabled",
+                                    "toolTip": "Specify if the SQL DB will be zone-redundant.",
+                                    "constraints": {
+                                        "allowedValues": [
+                                            {
+                                                "label": "Enabled",
+                                                "value": true
+                                            },
+                                            {
+                                                "label": "Disabled",
+                                                "value": false
+                                            }
+                                        ],
+                                        "required": true
+                                    },
+                                    "visible": "[steps('sqlDb').sqlDb.sku.zoneRedundant]"
+                                },
+                                {
+                                    "name": "sqlDbMaxSizeGb",
+                                    "type": "Microsoft.Common.TextBox",
+                                    "label": "Data Max Size (GB)",
+                                    "defaultValue": "",
+                                    "toolTip": "The maximum Data Max Size differs for different SKUs.<br>For the <strong>DTU</strong> purchasing model, see the <strong>\"Max storage (GB)\"</strong> for the selected SKU [here](https://learn.microsoft.com/en-us/azure/azure-sql/database/resource-limits-dtu-single-databases?view=azuresql#single-database-storage-sizes-and-compute-sizes).<br>For the <strong>vCore</strong> purchasing model see <strong>\"Max data size (GB)\"</strong> for the selected SKU [here](https://learn.microsoft.com/en-us/azure/azure-sql/database/resource-limits-vcore-single-databases?view=azuresql).",
+                                    "constraints": {
+                                        "required": true,
+                                        "regex": "",
+                                        "validationMessage": ""
+                                    },
+                                    "visible": true
+                                },
+                                {
+                                    "name": "maxSizeInfoDtu",
+                                    "type": "Microsoft.Common.InfoBox",
+                                    "visible": "[contains(split('Basic,Standard,Premium',','),steps('sqlDb').serviceTier.edition.name)]",
+                                    "options": {
+                                        "style": "Warning",
+                                        "text": "<h3><strong>Available values for Data Max Size for the DTU purchasing model</strong><h3>The following sizes (up to the maximum for the selected SKU) are available:<ul> <li><strong>Basic:</strong>          0.1 0.5 1 2 </li><li><strong>Standard:</strong>   5 10 20 30 40 50 100 150 200 250 300 400 500 750 1024 </li><li><strong>Premium:</strong>  1280 1536 1792 2048 2304 2560 2816 3072 3328 3584 3840 4096 </li> </ul> Note: Each tier also supports all values from lower tiers."
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "name": "backup",
+                            "type": "Microsoft.Common.Section",
+                            "label": "Backup",
+                            "elements": [
+                                {
+                                    "name": "ltrRetentionMonths",
+                                    "type": "Microsoft.Common.Slider",
+                                    "min": 0,
+                                    "max": 64,
+                                    "label": "Monthly LTR Backups retention",
+                                    "subLabel": "Months",
+                                    "defaultValue": 0,
+                                    "showStepMarkers": false,
+                                    "toolTip": "Keep the first backup of each month for:",
+                                    "constraints": {
+                                        "required": false
+                                    },
+                                    "visible": true
+                                },
+                                {
+                                    "name": "sqlDbBackupStorageRedundancy",
+                                    "type": "Microsoft.Common.DropDown",
+                                    "label": "Backup Storage Redundancy",
+                                    "defaultValue": "",
+                                    "toolTip": "Specify the backup storage redundancy for the SQL DB",
+                                    "constraints": {
+                                        "allowedValues": [
+                                            {
+                                                "label": "Local",
+                                                "value": "Local"
+                                            },
+                                            {
+                                                "label": "Zone",
+                                                "value": "Zone"
+                                            },
+                                            {
+                                                "label": "Geo",
+                                                "value": "Geo"
+                                            }
+                                        ],
+                                        "required": true
+                                    },
+                                    "visible": true
+                                }
+                            ]
+                        },
+                        {
+                            "name": "additionalSettings",
+                            "type": "Microsoft.Common.Section",
+                            "label": "Additional Settings",
+                            "elements": [
+                                {
+                                    "name": "sqlDbCollation",
+                                    "type": "Microsoft.Common.TextBox",
+                                    "label": "Collation",
+                                    "defaultValue": "Latin1_General_100_CI_AS_KS_WS",
+                                    "toolTip": "Collations in SQL Server provide sorting rules, case, and accent sensitivity properties for your data. Collations that are used with character data types, such as char and varchar, dictate the code page and corresponding characters that can be represented for that data type. For additional information go to: https://learn.microsoft.com/en-us/sql/relational-databases/collations/collation-and-unicode-support?view=sql-server-ver16",
+                                    "constraints": {
+                                        "required": true,
+                                        "regex": "",
+                                        "validationMessage": ""
+                                    },
+                                    "visible": true
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        "outputs": {
+            "parameters": {
+                "changeId": "[steps('basics').changeId]",
+                "resourceGroupName": "[steps('basics').resourceGroupName]",
+                "sqlServerParams": {
+                    "name": "[steps('basics').name]",
+                    "sqlAadAdministratorGroupName": "[steps('basics').auth.sqlAadAdministratorGroup.value.displayName]",
+                    "sqlAadAdministratorGroupObjectId": "[steps('basics').auth.sqlAadAdministratorGroup.value.id]",
+                    "tdeKeyVaultResourceId": "[steps('basics').encryption.keyVaultKey.value.vaultResourceId]",
+                    "tdeKeyVaultKeyName": "[last(split(steps('basics').encryption.keyVaultKey.value.keyId,'/'))]",
+                    "subnetResourceId": "[steps('basics').privateAccess.subnetList]"
+                },
+                "sqlDatabaseParams": {
+                    "name": "[steps('sqlDb').database.name]",
+                    "sqlDbSkuName": "[steps('sqlDb').serviceTier.sku.name]",
+                    "sqlDbBackupStorageRedundancy": "[steps('sqlDb').backup.sqlDbBackupStorageRedundancy]",
+                    "sqlDbLtrMonthlyRetentionInMonths": "[steps('sqlDb').backup.ltrRetentionMonths]",
+                    "sqlDbMinCapacity": "[steps('sqlDb').serviceTier.sqlDbMinCapacity]",
+                    "sqlDbReadScale": "[steps('sqlDb').serviceTier.sqlDbReadScale]",
+                    "sqlDbMaxSizeGb": "[steps('sqlDb').serviceTier.sqlDbMaxSizeGb]",
+                    "isZoneRedundant": "[bool(steps('sqlDb').serviceTier.isZoneRedundant)]",
+                    "sqlDbCollation": "[steps('sqlDb').additionalSettings.sqlDbCollation]"
+                }
+            },
+            "kind": "Subscription",
+            "location": "[steps('basics').resourceScope.location.name]",
+            "subscriptionId": "[steps('basics').resourceScope.subscription.id]"
+        }
+    }
+}
