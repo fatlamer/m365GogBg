@@ -3,7 +3,7 @@
     "view": {
         "kind": "Form",
         "properties": {
-            "title": "Create SQL Database Server",
+            "title": "Create SQL Server and Database",
             "steps": [
                 {
                     "name": "basics",
